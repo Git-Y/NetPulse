@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b1020" />
+    <meta name="description" content="NetPulse — PWA 网络探测工具：公网 IP 检测与域名/IP 可达性探测，支持 IPv4/IPv6 与强制 IPv4。" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.ipify.org https://api4.ipify.org https://api6.ipify.org https://api64.ipify.org https://ipinfo.io https://ipv4.icanhazip.com https://ipv6.icanhazip.com https://cloudflare-dns.com https://dns.google http: https:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none';"
+    />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>NetPulse — 网络探测工具</title>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <img src="./icons/icon.svg" alt="" class="brand-icon" width="32" height="32" />
+        <div>
+          <h1>NetPulse <span id="version-badge" class="version-badge">v4</span></h1>
+          <p class="tagline">PWA 网络探测工具</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <section class="card">
+        <div class="card-head">
+          <h2>本地公网 IP 检测</h2>
+          <button id="detect-btn" class="btn" type="button">检测公网 IP</button>
+        </div>
+        <p class="hint">
+          并行查询多个独立数据源并取多数共识，分别检测 IPv4 与 IPv6 出口地址。
+        </p>
+        <div id="ip-output" class="output"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>目标探测</h2>
+          <button id="probe-btn" class="btn" type="button">探测</button>
+        </div>
+        <p class="hint">输入域名或 IP（不要带协议、路径或端口）。</p>
+        <div class="probe-form">
+          <input
+            id="target-input"
+            class="input"
+            type="text"
+            inputmode="url"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="例如 example.com 或 1.1.1.1"
+            aria-label="探测目标"
+          />
+          <label class="field-inline">
+            <span class="field-label">探测次数</span>
+            <input
+              id="probe-count"
+              class="input input-number"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              max="20"
+              step="1"
+              value="1"
+              aria-label="探测次数（1-20，默认 1）"
+            />
+          </label>
+          <label class="field-inline">
+            <span class="field-label">超时(ms)</span>
+            <input
+              id="probe-timeout"
+              class="input input-number"
+              type="number"
+              inputmode="numeric"
+              min="1000"
+              max="30000"
+              step="500"
+              value="8000"
+              aria-label="超时时间（1000-30000 毫秒，默认 8000）"
+            />
+          </label>
+          <label class="checkbox">
+            <input id="force-ipv4" type="checkbox" />
+            <span>仅 IPv4（强制 IPv4 解析）</span>
+          </label>
+        </div>
+        <div id="probe-output" class="output"></div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>
+        · 所有探测经校验后发起。仅用于网络诊断与授权测试。
+      </p>
+    </footer>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
