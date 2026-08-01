@@ -3,7 +3,7 @@
 纯前端 PWA，无后端、无构建、无第三方依赖。支持：
 
 1. **本地公网 IP 检测**——多源并行交叉验证取多数共识，分别检测 **IPv4 / IPv6** 出口地址，并给出置信度评分。
-2. **目标探测**——对指定域名/IP 通过 DNS-over-HTTPS(DoH) 解析 A/AAAA 记录并进行 HTTP/HTTPS 可达性探测，支持**仅 IPv4（强制 IPv4 解析）**模式。
+2. **目标探测**——对指定域名/IP 进行 HTTP/HTTPS 可达性探测（支持多 attempts 串行、丢包率与延迟统计）；**仅 IPv4** 模式下经 DoH 仅查 A 记录并对解析出的 IPv4 发起明文直连。
 3. **代码安全**——严格 CSP、唯一 `fetch` 出口白名单、输入校验、禁用 `innerHTML`/`eval`、限流、Service Worker 仅缓存同源 app shell。
 
 > 仅用于网络诊断与授权测试。
@@ -40,9 +40,11 @@ python -m http.server 8000
 
 ### 目标探测
 - 输入纯域名或 IP（**不要带协议、路径、端口**），如 `example.com`、`1.1.1.1`、`2606:4700:4700::1111`。
-- 域名：DoH 解析 A/AAAA（含 TTL、来源、耗时），再探测 `https://<host>/` 与 `http://<host>/` 可达性与延迟。
-- IP 字面量：跳过 DNS，直接探测（IPv6 使用 `[...]` 括号）。
-- 可达性分类：收到响应（含 opaque / opaqueredirect）→ 可达；`AbortError` → 超时；`TypeError` → 不可达。
+- **普通模式**：跳过 DNS，直接探测 `https://<host>/` 与 `http://<host>/` 可达性与延迟（跳过 DoH 可显著缩短响应时间）。DNS 记录不在界面显示。
+- **仅 IPv4 模式**：经 DoH **仅查 A 记录**（后台进行，用于构造直连目标），再对每个解析出的 IPv4 地址额外发起 `http://<IP>/` 明文直连；DNS 记录同样不在界面显示。
+- **IP 字面量**：跳过 DNS，直接探测（IPv4 探测 `http://<IP>/`，IPv6 探测 `http://[<IP>]/`）。
+- **多 attempts 串行探测**：每个 URL 按「探测次数」(1–20) 串行发起多次（间隔 200ms，ping -c N 风格），聚合成功率、丢包率与 avg/min/max 延迟；总体状态分可达 / 部分可达 / 全超时 / 不可达。超时可在 1000–30000ms 间配置（默认 3000）。
+- 可达性分类：收到响应（含 opaque）→ 可达；`AbortError` → 超时；`TypeError`（网络失败 / 混合内容 / CSP 阻断）→ 不可达。
 
 ## 安全模型
 
@@ -69,7 +71,7 @@ base-uri 'self'; form-action 'none'; frame-ancestors 'none';
 - 无 `unsafe-inline` / `unsafe-eval`，无内联脚本/样式/事件处理器。
 
 ### 其它
-- **唯一 fetch 出口**：`src/fetch-helpers.js` 的 `fetchData` / `fetchProbe` 是全站唯一直接调用 `fetch` 的模块。数据请求强制主机在白名单内、`mode:'cors'`、`credentials:'omit'`、`cache:'no-store'`、`redirect:'error'`、`referrerPolicy:'no-referrer'` + `AbortController` 超时；探测请求 `mode:'no-cors'`、`redirect:'manual'` 且永不回传响应体。
+- **唯一 fetch 出口**：`src/fetch-helpers.js` 的 `fetchData` / `fetchProbe` 是全站唯一直接调用 `fetch` 的模块。数据请求强制主机在白名单内、`mode:'cors'`、`credentials:'omit'`、`cache:'no-store'`、`redirect:'error'`、`referrerPolicy:'no-referrer'` + `AbortController` 超时；探测请求 `mode:'no-cors'`、`redirect:'follow'` 且永不回传响应体（`no-cors` 下最终响应为 opaque、status 0、body 不可读，无重定向链信息泄露；`follow` 用以避免隐私/广告拦截扩展对 `manual` 重定向的同步中止）。
 - **输入校验**：`src/validate.js` 对域名/IPv4/IPv6 严格校验，拒绝任何 `://`、`/ ? # @ %` 空格及控制字符；DoH 的 `name` 经 `encodeURIComponent`，探测 URL 仅由已校验主机/IP 拼成。
 - **DOM 安全**：所有输出经 `textContent` / `createElement`；禁用 `innerHTML`、`eval`、`new Function`、`document.write`。
 - **限流**：每动作 1000ms 最小间隔，按钮 in-flight 期间禁用，防双击与刷免费额度。
@@ -107,8 +109,8 @@ NetPulse/
 
 1. **公网 IPv4**：点击「检测公网 IP」→ v4 面板显示共识 IP、≥2 源一致、置信度高。
 2. **公网 IPv6**：v6 网络显示共识 IPv6；无 v6 网络显示「IPv6 不可用」且 `api6` 报错。
-3. **仅 IPv4 + 探测 `example.com`**：DoH 仅 A 记录、透明说明显示、出现 IPv4 直连行；关闭则 A+AAAA 均显示。
-4. **探测 `cloudflare.com`**：A+AAAA 含 TTL/来源/耗时，`https://`、`http://` 均可达。
+3. **仅 IPv4 + 探测 `example.com`**：透明说明显示、出现 IPv4 直连行（DoH 在后台仅查 A 记录用于构造直连，不在界面显示 DNS）；关闭该模式则仅做 `https://`/`http://` 可达性探测，不显示 DNS。
+4. **探测 `cloudflare.com`**：`https://`、`http://` 均可达（普通模式不解析/显示 DNS）；开启仅 IPv4 则额外出现 IPv4 直连行。
 5. **探测 `1.1.1.1` / `2606:4700:4700::1111`**：跳过 DNS，直接可达性探测。
 6. **非法输入**：`https://evil.com/x`、`example.com/path`、`999.999.999.999`、`01.2.3.4`、`::g`、`a b.com`、>253 字符均被拒绝且不发请求。
 7. **限流**：1s 内连点两次 → 第二次无效。

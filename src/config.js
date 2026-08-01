@@ -108,7 +108,7 @@ export const PROBE_COUNT_DEFAULT = 1; // backward-compatible, fastest
 export const PROBE_INTERVAL_MS = 200; // pause between serial attempts on the same URL
 
 // Probe timeout (ms), unified across HTTPS / HTTP / IPv4-direct.
-export const TIMEOUT_PROBE_DEFAULT_MS = 8000;
+export const TIMEOUT_PROBE_DEFAULT_MS = 3000;
 export const TIMEOUT_PROBE_MIN_MS = 1000;
 export const TIMEOUT_PROBE_MAX_MS = 30000;
 
