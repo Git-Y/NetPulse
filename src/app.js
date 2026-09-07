@@ -7,6 +7,7 @@ import { probeTarget } from './probe.js';
 import {
   RateLimiter,
   renderIPDetection,
+  renderProbeLive,
   renderProbeResult,
   setBusy,
   setStatus,
@@ -56,15 +57,28 @@ async function runProbe() {
   const countInput = $byId('probe-count');
   const timeoutInput = $byId('probe-timeout');
   setBusy(button, true);
-  setStatus(out, '正在探测…', 'busy');
   try {
+    // Real-time flow: 'start' builds the live view, every 'attempt' event is
+    // appended the moment it completes (with its HTTP status code), and the
+    // final aggregated render replaces the live view on 'done'.
+    let live = null;
     // count/timeout are passed as raw strings; parseProbeCount/parseTimeoutMs
     // inside probeTarget validate + clamp them (single source of truth).
-    const result = await probeTarget(raw, {
-      forceIPv4: !!(forceBox && forceBox.checked),
-      count: countInput ? countInput.value : undefined,
-      timeoutMs: timeoutInput ? timeoutInput.value : undefined,
-    });
+    const result = await probeTarget(
+      raw,
+      {
+        forceIPv4: !!(forceBox && forceBox.checked),
+        count: countInput ? countInput.value : undefined,
+        timeoutMs: timeoutInput ? timeoutInput.value : undefined,
+      },
+      (evt) => {
+        if (evt.type === 'start') {
+          live = renderProbeLive(out, evt);
+        } else if (evt.type === 'attempt' && live) {
+          live.addAttempt(evt.label, evt.url, evt.attempt);
+        }
+      },
+    );
     renderProbeResult(out, result);
   } catch (err) {
     const msg =

@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0b1020" />
+    <meta name="theme-color" content="#0b0e13" />
     <meta name="description" content="NetPulse — PWA 网络探测工具：公网 IP 检测与域名/IP 可达性探测，支持 IPv4/IPv6 与强制 IPv4。" />
     <meta
       http-equiv="Content-Security-Policy"
@@ -21,23 +21,20 @@
   <body>
     <header class="app-header">
       <div class="brand">
-        <img src="./icons/icon.svg" alt="" class="brand-icon" width="32" height="32" />
-        <div>
-          <h1>NetPulse <span id="version-badge" class="version-badge">v4</span></h1>
-          <p class="tagline">网络探测工具</p>
-        </div>
+        <span class="pulse-dot" aria-hidden="true"></span>
+        <h1>NetPulse</h1>
+        <p class="tagline">公网 IP 检测 · 可达性探测</p>
       </div>
+      <span id="version-badge" class="version-badge">v5</span>
     </header>
 
     <main class="app-main">
       <section class="card">
         <div class="card-head">
-          <h2>本地公网 IP 检测</h2>
-          <button id="detect-btn" class="btn" type="button">检测公网 IP</button>
+          <h2>公网 IP</h2>
+          <button id="detect-btn" class="btn" type="button">检测</button>
         </div>
-        <p class="hint">
-          并行查询多个独立数据源并取多数共识，分别检测 IPv4 与 IPv6 出口地址。
-        </p>
+        <p class="hint">多源并行查询，取多数共识，IPv4 / IPv6 分开出示。</p>
         <div id="ip-output" class="output"></div>
       </section>
 
@@ -46,7 +43,7 @@
           <h2>目标探测</h2>
           <button id="probe-btn" class="btn" type="button">探测</button>
         </div>
-        <p class="hint">输入域名或 IP（不要带协议、路径或端口）。</p>
+        <p class="hint">输入域名或 IP，不带协议、路径或端口。</p>
         <div class="probe-form">
           <input
             id="target-input"
@@ -55,11 +52,11 @@
             inputmode="url"
             autocomplete="off"
             spellcheck="false"
-            placeholder="例如 example.com 或 1.1.1.1"
+            placeholder="example.com 或 1.1.1.1"
             aria-label="探测目标"
           />
           <label class="field-inline">
-            <span class="field-label">探测次数</span>
+            <span class="field-label">次数</span>
             <input
               id="probe-count"
               class="input input-number"
@@ -73,7 +70,7 @@
             />
           </label>
           <label class="field-inline">
-            <span class="field-label">超时(ms)</span>
+            <span class="field-label">超时</span>
             <input
               id="probe-timeout"
               class="input input-number"
@@ -83,12 +80,13 @@
               max="30000"
               step="500"
               value="3000"
-              aria-label="超时时间（1000-30000 毫秒，默认 3000）"
+              aria-label="超时毫秒（1000-30000，默认 3000）"
             />
+            <span class="field-label">ms</span>
           </label>
           <label class="checkbox">
             <input id="force-ipv4" type="checkbox" />
-            <span>仅 IPv4（强制 IPv4 解析）</span>
+            <span>仅 IPv4</span>
           </label>
         </div>
         <div id="probe-output" class="output"></div>
@@ -96,9 +94,7 @@
     </main>
 
     <footer class="app-footer">
-      <p>
-        · 所有探测经校验后发起。仅用于网络诊断与授权测试。
-      </p>
+      <p>仅用于网络诊断与授权测试</p>
     </footer>
 
     <script type="module" src="./src/app.js"></script>

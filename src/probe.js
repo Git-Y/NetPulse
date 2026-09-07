@@ -13,6 +13,13 @@
 //   - Each URL is probed `count` times SERIALLY with PROBE_INTERVAL_MS between
 //     attempts. URLs run in parallel. Results are aggregated into success
 //     count, loss rate, and latency stats. count is validated/clamped upstream.
+//
+// Real-time reporting:
+//   - probeTarget accepts an optional onEvent callback. Events:
+//       { type: 'start',   target, forceIPv4, count, timeoutMs, intervalMs, specs }
+//       { type: 'attempt', label, url, attempt }   // fired IMMEDIATELY after
+//                                                  // each attempt completes
+//       { type: 'done',    result }                // final aggregated result
 
 import { PROBE_INTERVAL_MS } from './config.js';
 import { resolveDNS } from './doh.js';
@@ -53,19 +60,24 @@ function buildProbes(target, dns, forceIPv4) {
 }
 
 // Probe one URL `count` times serially with `intervalMs` between attempts.
+// Each attempt is reported to onAttempt the moment it completes (real-time).
 // Returns the aggregated result (see aggregateAttempts).
-async function probeUrlSerial(url, count, timeoutMs, intervalMs) {
+async function probeUrlSerial(url, count, timeoutMs, intervalMs, onAttempt) {
   const attempts = [];
   for (let i = 0; i < count; i++) {
     if (i > 0) await sleep(intervalMs); // ping -c N pacing
     const r = await fetchProbe(url, { timeoutMs });
-    attempts.push({
+    const attempt = {
       index: i + 1,
       ok: r.ok,
       status: r.status, // 'reachable' | 'timeout' | 'unreachable'
+      httpStatus: r.httpStatus != null ? r.httpStatus : null, // real code when CORS allows; null when opaque
+      opaque: !!r.opaque, // true: reachable via no-cors, code not visible
       latencyMs: r.latencyMs,
       error: r.error || null,
-    });
+    };
+    attempts.push(attempt);
+    if (onAttempt) onAttempt(attempt);
   }
   return aggregateAttempts(attempts);
 }
@@ -113,8 +125,11 @@ function aggregateAttempts(attempts) {
   };
 }
 
-export async function probeTarget(rawInput, opts = {}) {
+export async function probeTarget(rawInput, opts = {}, onEvent = null) {
   const { forceIPv4 = false, count: rawCount, timeoutMs: rawTimeout } = opts;
+  const emit = (e) => {
+    if (onEvent) onEvent(e);
+  };
 
   const target = parseTarget(rawInput);
   const count = parseProbeCount(rawCount);
@@ -130,16 +145,35 @@ export async function probeTarget(rawInput, opts = {}) {
   }
 
   const specs = buildProbes(target, dns, forceIPv4);
+
+  // Real-time: announce the run layout so the UI can build the live view
+  // before the first result arrives.
+  emit({
+    type: 'start',
+    target,
+    forceIPv4,
+    count,
+    timeoutMs,
+    intervalMs: PROBE_INTERVAL_MS,
+    specs: specs.map((s) => ({ label: s.label, url: s.url })),
+  });
+
   // URLs are independent -> parallel; each URL is probed serially inside.
+  // Every attempt is emitted the moment it completes.
   const probes = await Promise.all(
-    specs.map(async (s) => ({
-      label: s.label,
-      url: s.url,
-      ...(await probeUrlSerial(s.url, count, timeoutMs, PROBE_INTERVAL_MS)),
-    })),
+    specs.map(async (s) => {
+      const aggregated = await probeUrlSerial(
+        s.url,
+        count,
+        timeoutMs,
+        PROBE_INTERVAL_MS,
+        (attempt) => emit({ type: 'attempt', label: s.label, url: s.url, attempt }),
+      );
+      return { label: s.label, url: s.url, ...aggregated };
+    }),
   );
 
-  return {
+  const result = {
     target,
     forceIPv4,
     count,
@@ -149,4 +183,6 @@ export async function probeTarget(rawInput, opts = {}) {
     probes,
     note: forceIPv4 ? FORCE_IPV4_NOTE : null,
   };
+  emit({ type: 'done', result });
+  return result;
 }

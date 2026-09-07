@@ -67,10 +67,20 @@ export async function fetchData(url, { timeoutMs, headers } = {}) {
 // Reachability probe to a validated target URL. Returns a plain result object;
 // NEVER a Response body.
 //
+// Two-leg strategy to obtain the HTTP status code while preserving
+// reachability semantics:
+//   1. CORS-mode fetch: if the target allows cross-origin reads we get the
+//      REAL HTTP status code (200/301/404/503...).
+//   2. If leg 1 fails with TypeError (usually CORS restriction, possibly a
+//      real network error), retry with mode:'no-cors'. A success there means
+//      the target IS reachable, but the response is opaque — status code is
+//      not visible to JS (httpStatus: null, opaque: true).
+//
 // Outcome classification:
-//   - got any Response (incl. opaque) -> reachable + latency
-//   - FetchTimeoutError -> timeout
-//   - TypeError (network / mixed-content / blocked) -> unreachable (with note)
+//   - got any Response (cors or opaque) -> reachable + latency
+//   - FetchTimeoutError -> timeout (no fallback: a slow cors leg means the
+//     no-cors leg would be slow too)
+//   - TypeError on both legs -> unreachable (with note)
 //
 // redirect:'follow' is intentional. We previously used 'manual', but in real
 // user environments privacy/ad-blocking extensions abort manual-redirect
@@ -80,16 +90,19 @@ export async function fetchData(url, { timeoutMs, headers } = {}) {
 // 'opaque' (status 0, body hidden), so no redirect-chain information leaks to
 // JS. credentials:'omit' ensures no cookies are sent along the chain.
 export async function fetchProbe(url, { timeoutMs } = {}) {
-  const start =
+  const now = () =>
     typeof performance !== 'undefined' && performance.now
       ? performance.now()
       : Date.now();
+  const start = now();
+  const elapsed = () => Math.round(now() - start);
+
   try {
     const res = await fetchWithTimeout(
       url,
       {
         method: 'GET',
-        mode: 'no-cors',
+        mode: 'cors',
         credentials: 'omit',
         cache: 'no-store',
         redirect: 'follow',
@@ -97,28 +110,44 @@ export async function fetchProbe(url, { timeoutMs } = {}) {
       },
       timeoutMs,
     );
-    const latencyMs = Math.round(
-      (typeof performance !== 'undefined' && performance.now
-        ? performance.now()
-        : Date.now()) - start,
-    );
-    // With mode:'no-cors' a successful response is type 'opaque' (status 0).
-    return { ok: true, status: 'reachable', latencyMs };
+    return { ok: true, status: 'reachable', httpStatus: res.status, latencyMs: elapsed() };
   } catch (err) {
-    const latencyMs = Math.round(
-      (typeof performance !== 'undefined' && performance.now
-        ? performance.now()
-        : Date.now()) - start,
-    );
     if (err && err.name === 'FetchTimeoutError') {
-      return { ok: false, status: 'timeout', latencyMs, error: '请求超时' };
+      return { ok: false, status: 'timeout', httpStatus: null, latencyMs: elapsed(), error: '请求超时' };
     }
-    // TypeError: failed to fetch (DNS, connection refused, mixed content, CSP).
-    return {
-      ok: false,
-      status: 'unreachable',
-      latencyMs,
-      error: err && err.message ? err.message : '无法连接',
-    };
+    // TypeError: CORS restriction OR a real network failure — disambiguate
+    // with a no-cors leg, sharing the single overall timeout budget.
+    const remaining = timeoutMs - elapsed();
+    if (remaining <= 0) {
+      return { ok: false, status: 'timeout', httpStatus: null, latencyMs: elapsed(), error: '请求超时' };
+    }
+    try {
+      await fetchWithTimeout(
+        url,
+        {
+          method: 'GET',
+          mode: 'no-cors',
+          credentials: 'omit',
+          cache: 'no-store',
+          redirect: 'follow',
+          referrerPolicy: 'no-referrer',
+        },
+        remaining,
+      );
+      // Opaque response (status 0): reachable, code not visible.
+      return { ok: true, status: 'reachable', httpStatus: null, opaque: true, latencyMs: elapsed() };
+    } catch (err2) {
+      if (err2 && err2.name === 'FetchTimeoutError') {
+        return { ok: false, status: 'timeout', httpStatus: null, latencyMs: elapsed(), error: '请求超时' };
+      }
+      // TypeError: failed to fetch (DNS, connection refused, mixed content, CSP).
+      return {
+        ok: false,
+        status: 'unreachable',
+        httpStatus: null,
+        latencyMs: elapsed(),
+        error: err2 && err2.message ? err2.message : '无法连接',
+      };
+    }
   }
 }

@@ -4,8 +4,28 @@
 // Trusted data endpoints (where we READ response bodies via CORS).
 // `extract` receives the parsed body (JSON object or text string) and returns
 // a raw IP string (or null). Family filtering is applied by the caller.
+// Domestic (CN) providers are listed FIRST for priority/faster response in
+// mainland networks; overseas providers remain as cross-validation sources.
 export const IP_PROVIDERS = [
   // ---- IPv4 family ----
+  {
+    name: '百度启福',
+    family: 4,
+    type: 'json',
+    url: 'https://qifu-api.baidubce.com/ip/local/geo/v1/district',
+    // data.origin may contain "ip, ..." — take the first token.
+    extract: (b) => {
+      const origin = b && b.data && typeof b.data.origin === 'string' ? b.data.origin : null;
+      return origin ? origin.split(',')[0].trim() : null;
+    },
+  },
+  {
+    name: 'ipw.cn',
+    family: 4,
+    type: 'text',
+    url: 'https://4.ipw.cn',
+    extract: (t) => (typeof t === 'string' ? t.trim() : null),
+  },
   {
     name: 'ipify4',
     family: 4,
@@ -35,6 +55,13 @@ export const IP_PROVIDERS = [
     extract: (t) => (typeof t === 'string' ? t.trim() : null),
   },
   // ---- IPv6 family ----
+  {
+    name: 'ipw.cn',
+    family: 6,
+    type: 'text',
+    url: 'https://6.ipw.cn',
+    extract: (t) => (typeof t === 'string' ? t.trim() : null),
+  },
   {
     name: 'ipify6',
     family: 6,
@@ -87,6 +114,11 @@ export const DOH_PROVIDERS = [
 // Host allowlist enforced by hardenedFetch for purpose:'data'.
 // (Hostname-only comparison; ports/schemes handled by CSP + fetch options.)
 export const ALLOWED_DATA_HOSTS = new Set([
+  // Domestic (CN) providers — queried first.
+  'qifu-api.baidubce.com',
+  '4.ipw.cn',
+  '6.ipw.cn',
+  // Overseas cross-validation providers.
   'api.ipify.org',
   'api4.ipify.org',
   'api6.ipify.org',

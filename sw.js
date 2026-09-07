@@ -7,7 +7,7 @@
 //   - No importScripts; no URL construction from input; no body reading of
 //     cross-origin responses.
 
-var CACHE_NAME = 'netpulse-v4';
+var CACHE_NAME = 'netpulse-v6';
 var CACHE_FILES = [
   './',
   './index.html',

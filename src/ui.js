@@ -268,6 +268,30 @@ const ATTEMPT_STATUS_BADGE = {
   unreachable: { text: '失败', cls: 'badge badge-none' },
 };
 
+// Format the HTTP status code cell for one attempt.
+//   - real code (CORS-readable): "200" / "404" / ...
+//   - reachable but opaque: "不可见" (no-cors response, JS cannot read the code)
+//   - failed attempts: "—"
+function httpStatusLabel(attempt) {
+  if (attempt.ok) {
+    return attempt.httpStatus != null ? `HTTP ${attempt.httpStatus}` : 'HTTP 不可见';
+  }
+  return '—';
+}
+
+// One attempt row: #index · status badge · HTTP code · latency / error.
+function renderAttemptRow(a) {
+  const ab = ATTEMPT_STATUS_BADGE[a.status] || ATTEMPT_STATUS_BADGE.unreachable;
+  return el('li', { class: 'attempt-row' }, [
+    el('span', { class: 'attempt-index' }, [`#${a.index}`]),
+    el('span', { class: ab.cls }, [ab.text]),
+    el('span', { class: 'attempt-code' }, [httpStatusLabel(a)]),
+    el('span', { class: 'attempt-latency' }, [
+      a.ok ? `${a.latencyMs} ms` : a.error || '—',
+    ]),
+  ]);
+}
+
 function lossBadge(lossRate) {
   const pct = Math.round(lossRate * 100);
   let cls;
@@ -301,6 +325,13 @@ function renderAggregatedProbeRow(p) {
     }
   }
   stats.appendChild(lossBadge(p.lossRate));
+  // Single-attempt runs have no collapsible details section, so surface the
+  // HTTP status code directly in the stats line.
+  if (p.totalCount === 1 && p.attempts.length === 1) {
+    stats.appendChild(
+      el('span', { class: 'attempt-code' }, [httpStatusLabel(p.attempts[0])]),
+    );
+  }
   const overall =
     PROBE_OVERALL_BADGE[p.overallStatus] || PROBE_OVERALL_BADGE.unreachable;
   stats.appendChild(el('span', { class: overall.cls }, [overall.text]));
@@ -309,21 +340,11 @@ function renderAggregatedProbeRow(p) {
   // Per-attempt details only when more than one attempt (count=1 degrades
   // to the simple single-row view).
   if (p.totalCount > 1) {
-    const details = el('details', { class: 'probe-attempts' });
+    const details = el('details', { class: 'probe-attempts', open: true });
     details.appendChild(el('summary', {}, ['每次详情']));
     const list = el('ul', { class: 'attempt-list' });
     for (const a of p.attempts) {
-      const ab =
-        ATTEMPT_STATUS_BADGE[a.status] || ATTEMPT_STATUS_BADGE.unreachable;
-      list.appendChild(
-        el('li', { class: 'attempt-row' }, [
-          el('span', { class: 'attempt-index' }, [`#${a.index}`]),
-          el('span', { class: ab.cls }, [ab.text]),
-          el('span', { class: 'attempt-latency' }, [
-            a.ok ? `${a.latencyMs} ms` : a.error || '—',
-          ]),
-        ]),
-      );
+      list.appendChild(renderAttemptRow(a));
     }
     details.appendChild(list);
     mid.appendChild(details);
@@ -331,6 +352,70 @@ function renderAggregatedProbeRow(p) {
 
   row.appendChild(mid);
   return row;
+}
+
+// Live (real-time) probe view. Built from the 'start' event (which carries the
+// probe layout), then filled in attempt-by-attempt as 'attempt' events arrive.
+// Returns { addAttempt(label, url, attempt) }. The final aggregated render
+// (renderProbeResult) replaces this view once the run completes.
+export function renderProbeLive(container, startEvt) {
+  clear(container);
+
+  const summary = el('section', { class: 'panel' });
+  summary.appendChild(el('h3', { class: 'panel-title' }, ['探测进行中…']));
+  summary.appendChild(
+    el('div', { class: 'probe-target' }, [
+      el('code', { class: 'ip-value' }, [startEvt.target.value]),
+      el(
+        'span',
+        { class: 'badge badge-info' },
+        [
+          startEvt.target.type === 'domain'
+            ? '域名'
+            : startEvt.target.type === 'ipv4'
+              ? 'IPv4'
+              : 'IPv6',
+        ],
+      ),
+      startEvt.forceIPv4
+        ? el('span', { class: 'badge badge-medium' }, ['IPv4-only'])
+        : null,
+    ]),
+  );
+  summary.appendChild(
+    el('div', { class: 'probe-params' }, [
+      `次数 ${startEvt.count} · 超时 ${startEvt.timeoutMs} ms · 间隔 ${startEvt.intervalMs} ms`,
+    ]),
+  );
+  container.appendChild(summary);
+
+  const section = el('section', { class: 'panel' });
+  section.appendChild(el('h3', { class: 'panel-title' }, ['实时结果']));
+  const ul = el('ul', { class: 'probe-list' });
+  section.appendChild(ul);
+  container.appendChild(section);
+
+  // Map "label\nurl" -> the <ul> that accumulates that probe's attempts.
+  const lists = new Map();
+  for (const s of startEvt.specs) {
+    const row = el('li', { class: 'probe-row-agg' });
+    row.appendChild(el('div', { class: 'probe-label' }, [s.label]));
+    const mid = el('div', { class: 'probe-url-wrap' });
+    mid.appendChild(el('div', { class: 'probe-url' }, [s.url]));
+    const list = el('ul', { class: 'attempt-list' });
+    mid.appendChild(list);
+    row.appendChild(mid);
+    ul.appendChild(row);
+    lists.set(`${s.label}\n${s.url}`, list);
+  }
+
+  return {
+    // Append one completed attempt to its probe row (real-time update).
+    addAttempt(label, url, attempt) {
+      const list = lists.get(`${label}\n${url}`);
+      if (list) list.appendChild(renderAttemptRow(attempt));
+    },
+  };
 }
 
 export function renderProbeResult(container, result) {
