@@ -123,6 +123,28 @@ h1 {
   font-family: var(--mono);
 }
 
+/* 引擎徽章：curl（本地后端在线）/ 浏览器（回退） */
+.engine-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.engine-on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid rgba(62, 207, 178, 0.35);
+}
+
+.engine-off {
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  border: 1px solid var(--border-soft);
+}
+
 /* —— 主体布局 —— */
 
 .app-main {

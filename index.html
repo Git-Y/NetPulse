@@ -25,6 +25,7 @@
         <h1>NetPulse</h1>
         <p class="tagline">公网 IP 检测 · 可达性探测</p>
       </div>
+      <span id="engine-badge" class="engine-badge engine-off" title="本地探测后端（server.js）状态">浏览器引擎</span>
       <span id="version-badge" class="version-badge">v5</span>
     </header>
 
@@ -43,7 +44,7 @@
           <h2>目标探测</h2>
           <button id="probe-btn" class="btn" type="button">探测</button>
         </div>
-        <p class="hint">输入域名或 IP，不带协议、路径或端口。</p>
+        <p class="hint">域名或 IP；端口可选，填写后仅探测该端口。仅 TCP 需本地后端。</p>
         <div class="probe-form">
           <input
             id="target-input"
@@ -55,6 +56,20 @@
             placeholder="example.com 或 1.1.1.1"
             aria-label="探测目标"
           />
+          <label class="field-inline">
+            <span class="field-label">端口</span>
+            <input
+              id="probe-port"
+              class="input input-number"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              max="65535"
+              step="1"
+              placeholder="—"
+              aria-label="可选端口（1-65535，留空则探测 443/80）"
+            />
+          </label>
           <label class="field-inline">
             <span class="field-label">次数</span>
             <input
@@ -85,11 +100,16 @@
             <span class="field-label">ms</span>
           </label>
           <label class="checkbox">
+            <input id="tcp-only" type="checkbox" />
+            <span>仅 TCP 建连</span>
+          </label>
+          <label class="checkbox">
             <input id="force-ipv4" type="checkbox" />
             <span>仅 IPv4</span>
           </label>
         </div>
         <div id="probe-output" class="output"></div>
+        <p id="engine-note" class="footnote" hidden></p>
       </section>
     </main>
 
